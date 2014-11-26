@@ -74,15 +74,15 @@ public class KlteRIL extends RIL implements CommandsInterface {
 
     private Message mPendingGetSimStatus;
 
-    public KlteRIL(Context context, int preferredNetworkType,
-            int cdmaSubscription, Integer instanceId) {
-        this(context, preferredNetworkType, cdmaSubscription);
+    public KlteRIL(Context context, int networkMode, int cdmaSubscription) {
+        super(context, networkMode, cdmaSubscription, null);
+        mAudioManager = (AudioManager)mContext.getSystemService(Context.AUDIO_SERVICE);
+        mQANElements = SystemProperties.getInt("ro.ril.telephony.mqanelements", 4);
     }
 
-    public KlteRIL(Context context, int networkMode,
-            int cdmaSubscription) {
-        super(context, networkMode, cdmaSubscription);
-        mAudioManager = (AudioManager)mContext.getSystemService(Context.AUDIO_SERVICE);
+    public KlteRIL(Context context, int preferredNetworkType,
+            int cdmaSubscription, Integer instanceId) {
+        super(context, preferredNetworkType, cdmaSubscription, instanceId);
         mQANElements = SystemProperties.getInt("ro.ril.telephony.mqanelements", 4);
     }
 
@@ -195,45 +195,44 @@ public class KlteRIL extends RIL implements CommandsInterface {
     }
 
     @Override
-    protected Object responseSignalStrength(Parcel p) {
-        int numInts = 12;
-        int response[];
+    responseSignalStrength(Parcel p) {
+        int gsmSignalStrength = p.readInt() & 0xff;
+        int gsmBitErrorRate = p.readInt();
+        int cdmaDbm = p.readInt();
+        int cdmaEcio = p.readInt();
+        int evdoDbm = p.readInt();
+        int evdoEcio = p.readInt();
+        int evdoSnr = p.readInt();
+        int lteSignalStrength = p.readInt();
+        int lteRsrp = p.readInt();
+        int lteRsrq = p.readInt();
+        int lteRssnr = p.readInt();
+        int lteCqi = p.readInt();
+        int tdScdmaRscp = p.readInt();
+        // constructor sets default true, makeSignalStrengthFromRilParcel does not set it
+        boolean isGsm = true;
 
-        // This is a mashup of algorithms used in
-        // SamsungQualcommUiccRIL.java
-
-        // Get raw data
-        response = new int[numInts];
-        for (int i = 0; i < numInts; i++) {
-            response[i] = p.readInt();
-        }
-        //gsm
-        response[0] &= 0xff; //gsmDbm
-
-        //cdma
-        // Take just the least significant byte as the signal strength
-        response[2] %= 256;
-        response[4] %= 256;
-
-        // RIL_LTE_SignalStrength
-        if (googleEditionSS && !isGSM){
-            response[8] = response[2];
-        }else if ((response[7] & 0xff) == 255 || response[7] == 99) {
-            // If LTE is not enabled, clear LTE results
-            // 7-11 must be -1 for GSM signal strength to be used (see
-            // frameworks/base/telephony/java/android/telephony/SignalStrength.java)
-            // make sure lte is disabled
-            response[7] = 99;
-            response[8] = SignalStrength.INVALID;
-            response[9] = SignalStrength.INVALID;
-            response[10] = SignalStrength.INVALID;
-            response[11] = SignalStrength.INVALID;
-        }else{ // lte is gsm on samsung/qualcomm cdma stack
-            response[7] &= 0xff;
+        if ((lteSignalStrength & 0xff) == 255 || lteSignalStrength == 99) {
+            lteSignalStrength = 99;
+            lteRsrp = SignalStrength.INVALID;
+            lteRsrq = SignalStrength.INVALID;
+            lteRssnr = SignalStrength.INVALID;
+            lteCqi = SignalStrength.INVALID;
+        } else {
+            lteSignalStrength &= 0xff;
         }
 
-        return new SignalStrength(response[0], response[1], response[2], response[3], response[4], response[5], response[6], response[7], response[8], response[9], response[10], response[11], (p.readInt() != 0));
+        if (RILJ_LOGD)
+            riljLog("gsmSignalStrength:" + gsmSignalStrength + " gsmBitErrorRate:" + gsmBitErrorRate +
+                    " cdmaDbm:" + cdmaDbm + " cdmaEcio:" + cdmaEcio + " evdoDbm:" + evdoDbm +
+                    " evdoEcio: " + evdoEcio + " evdoSnr:" + evdoSnr +
+                    " lteSignalStrength:" + lteSignalStrength + " lteRsrp:" + lteRsrp +
+                    " lteRsrq:" + lteRsrq + " lteRssnr:" + lteRssnr + " lteCqi:" + lteCqi +
+                    " tdScdmaRscp:" + tdScdmaRscp + " isGsm:" + (isGsm ? "true" : "false"));
 
+        return new SignalStrength(gsmSignalStrength, gsmBitErrorRate, cdmaDbm, cdmaEcio, evdoDbm,
+                evdoEcio, evdoSnr, lteSignalStrength, lteRsrp, lteRsrq, lteRssnr, lteCqi,
+                tdScdmaRscp, isGsm);
     }
 
     @Override
@@ -358,7 +357,6 @@ public class KlteRIL extends RIL implements CommandsInterface {
         }
 
         return response;
-
     }
 
     @Override
@@ -819,17 +817,14 @@ public class KlteRIL extends RIL implements CommandsInterface {
             dialEmergencyCall(address, clirMode, result);
             return;
         }
-        if(!dialCode){
-            super.dial(address, clirMode, uusInfo, result);
-            return;
-        }
+
         RILRequest rr = RILRequest.obtain(RIL_REQUEST_DIAL, result);
 
         rr.mParcel.writeString(address);
         rr.mParcel.writeInt(clirMode);
-        rr.mParcel.writeInt(0);
-        rr.mParcel.writeInt(1);
-        rr.mParcel.writeString("");
+        rr.mParcel.writeInt(0);     // CallDetails.call_type
+        rr.mParcel.writeInt(1);     // CallDetails.call_domain
+        rr.mParcel.writeString(""); // CallDetails.getCsvFromExtras
 
         if (uusInfo == null) {
             rr.mParcel.writeInt(0); // UUS information is absent
@@ -895,23 +890,20 @@ public class KlteRIL extends RIL implements CommandsInterface {
     public void
     dialEmergencyCall(String address, int clirMode, Message result) {
         RILRequest rr;
-        Rlog.v(RILJ_LOG_TAG, "Emergency dial: " + address);
 
         rr = RILRequest.obtain(RIL_REQUEST_DIAL_EMERGENCY, result);
-        rr.mParcel.writeString(address + "/");
+        rr.mParcel.writeString(address);
         rr.mParcel.writeInt(clirMode);
-        rr.mParcel.writeInt(0);  // UUS information is absent
+        rr.mParcel.writeInt(0);        // CallDetails.call_type
+        rr.mParcel.writeInt(3);        // CallDetails.call_domain
+        rr.mParcel.writeString("");    // CallDetails.getCsvFromExtra
+        rr.mParcel.writeInt(0);        // Unknown
 
         if (RILJ_LOGD) riljLog(rr.serialString() + "> " + requestToString(rr.mRequest));
 
         send(rr);
     }
 
-    // Hack for Lollipop
-    // The system now queries for SIM status before radio on, resulting
-    // in getting an APPSTATE_DETECTED state. The RIL does not send an
-    // RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED message after the SIM is
-    // initialized, so delay the message until the radio is on.
     @Override
     public void
     getIccCardStatus(Message result) {
