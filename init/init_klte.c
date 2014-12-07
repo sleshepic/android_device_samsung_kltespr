@@ -60,7 +60,6 @@ void init_msm_properties(unsigned long msm_id, unsigned long msm_ver, char *boar
         property_set("ro.build.description", "kltespr-user 4.4.2 KOT49H G900PVPU1ANCB release-keys");
         property_set("ro.product.model", "SM-G900P");
         property_set("ro.product.device", "kltespr");
-        property_set("telephony.sms.pseudo_multipart", "1");
         cdma_properties("1", "310120", "Sprint");
     }
     /* TODO: Add Sprint MVNOs */
@@ -70,13 +69,12 @@ void init_msm_properties(unsigned long msm_id, unsigned long msm_ver, char *boar
     INFO("Found bootloader id %s setting build properties for %s device\n", bootloader, devicename);
 }
 
-void cdma_properties(char default_cdma_sub[], char operator_numeric[],
-        char operator_alpha[])
+void cdma_properties(char cdma_sub[], char op_numeric[], char op_alpha[])
 {
     property_set("ril.subscription.types", "NV,RUIM");
-    property_set("ro.cdma.home.operator.numeric", operator_numeric);
-    property_set("ro.cdma.home.operator.alpha", operator_alpha);
-    property_set("ro.telephony.default_cdma_sub", default_cdma_sub);
+    property_set("ro.cdma.home.operator.numeric", op_numeric);
+    property_set("ro.cdma.home.operator.alpha", op_alpha);
+    property_set("ro.telephony.default_cdma_sub", cdma_sub);
     property_set("ro.telephony.default_network", "10");
     property_set("ro.telephony.ril.config", "newDriverCallU,newDialCode");
     property_set("telephony.lteOnCdmaDevice", "1");
