@@ -2,3 +2,7 @@
 rild.libargs=-d /dev/smd0
 rild.libpath=/system/lib/libsec-ril.so
 ro.ril.telephony.mqanelements=6
+
+# Device
+ro.product.device=kltespr
+ro.product.model=kltespr
